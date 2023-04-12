@@ -1,14 +1,32 @@
 use std::io::{StdoutLock, Write};
 
 use anyhow::{bail, Context};
-use maelstrom_lib::{Body, Message, Payload};
+use maelstrom_lib::{main_loop, Body, Message, Node};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub enum Payload {
+    Echo {
+        echo: String,
+    },
+    EchoOk {
+        echo: String,
+    },
+    Init {
+        node_id: String,
+        node_ids: Vec<String>,
+    },
+    InitOk,
+}
 
 struct EchoNode {
     id: usize,
 }
 
-impl EchoNode {
-    pub fn step(&mut self, input: Message, output: &mut StdoutLock) -> anyhow::Result<()> {
+impl Node<Payload> for EchoNode {
+    fn step(&mut self, input: Message<Payload>, output: &mut StdoutLock) -> anyhow::Result<()> {
         match input.body.payload {
             Payload::Echo { echo } => {
                 let reply = Message {
@@ -51,19 +69,5 @@ impl EchoNode {
 }
 
 fn main() -> anyhow::Result<()> {
-    let stdin = std::io::stdin().lock();
-    let inputs = serde_json::Deserializer::from_reader(stdin).into_iter::<Message>();
-
-    let mut stdout = std::io::stdout().lock();
-
-    let mut state = EchoNode { id: 0 };
-
-    for input in inputs {
-        let input = input.context("Maelstrom input from STDIN could not be deserialized")?;
-        state
-            .step(input, &mut stdout)
-            .context("Node step function failed")?
-    }
-
-    Ok(())
+    main_loop(EchoNode { id: 0 })
 }
